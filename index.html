@@ -45,11 +45,10 @@
         allMusicList.push({ id: doc.id, ...doc.data() });
       });
 
-      // 개수 업데이트
       document.getElementById("totalCount").innerText = allMusicList.length;
-      
-      // 화면 렌더링
       renderMusicList(allMusicList);
+    }, (error) => {
+      console.error("Firestore 오류:", error);
     });
 
     // 화면 렌더링 함수
@@ -60,7 +59,7 @@
       if (list.length === 0) {
         container.innerHTML = `
           <div class="col-span-full text-center py-20">
-            <p class="text-slate-400 font-bold text-sm">검색 결과가 없거나 등록된 음원이 없습니다.</p>
+            <p class="text-slate-400 font-bold text-sm">등록된 음원이 없습니다.</p>
           </div>
         `;
         return;
@@ -76,12 +75,19 @@
               <img src="${music.thumbnail || 'https://via.placeholder.com/300'}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" alt="cover">
             </div>
             <h3 class="font-bold text-slate-900 text-sm truncate" title="${music.title}">${music.title}</h3>
-            <p class="text-xs text-slate-500 font-semibold mt-0.5 mb-4 truncate">${music.artist}</p>
+            <p class="text-xs text-slate-500 font-semibold mt-0.5 mb-3 truncate">${music.artist}</p>
           </div>
-          <audio controls class="w-full h-9 rounded-lg">
-            <source src="${music.fileUrl}" type="audio/mp3">
-            브라우저가 오디오 재생을 지원하지 않습니다.
-          </audio>
+          
+          <div class="space-y-2">
+            <audio controls class="w-full h-9 rounded-lg">
+              <source src="${music.fileUrl}" type="audio/mp3">
+            </audio>
+            
+            <!-- 다운로드 버튼 추가 -->
+            <a href="${music.fileUrl}" download="${music.title}.mp3" target="_blank" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2 rounded-xl transition flex items-center justify-center gap-1">
+              <span>⬇️ MP3 다운로드</span>
+            </a>
+          </div>
         `;
         container.appendChild(card);
       });
@@ -94,8 +100,6 @@
 
   <!-- 상단 내비게이션 바 -->
   <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
-    
-    <!-- 좌측: 로고 & 실시간 검색창 -->
     <div class="flex items-center gap-4 flex-1 max-w-xl">
       <h1 class="text-lg font-black text-slate-900 tracking-tight whitespace-nowrap">🎵 MP3 Hub</h1>
       <div class="relative w-full">
@@ -104,7 +108,6 @@
       </div>
     </div>
 
-    <!-- 우측: 업로드 모달 오픈 버튼 -->
     <button id="openModalBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2 rounded-full text-xs transition shadow-sm flex items-center gap-1.5 whitespace-nowrap">
       <span>+</span>
       <span>음원 업로드</span>
@@ -113,7 +116,6 @@
 
   <!-- 메인 라이브러리 컨테이너 -->
   <main class="max-w-7xl mx-auto px-4 sm:px-8 pt-8">
-    
     <div class="flex items-center justify-between mb-6">
       <h2 class="text-base font-black text-slate-900 flex items-center gap-2">
         <span>전체 음원 목록</span>
@@ -121,34 +123,27 @@
       </h2>
     </div>
 
-    <!-- 그리드 형태의 대용량 MP3 트랙 리스트 -->
     <div id="musicListContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-      <!-- JS로 음악 카드들 대량 출력 -->
     </div>
-
   </main>
 
-  <!-- 업로드 모달 (팝업창) -->
+  <!-- 업로드 모달 -->
   <div id="uploadModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white border border-slate-200 w-full max-w-lg rounded-3xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-      
-      <!-- 닫기 버튼 -->
       <button id="closeModalBtn" class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
 
       <h2 class="text-lg font-black text-slate-900 mb-1">🎵 새로운 음원 추가</h2>
       <p class="text-xs text-slate-500 mb-6">유튜브 링크 또는 MP3 파일을 라이브러리에 등록하세요.</p>
 
-      <!-- 탭 선택 (유튜브 링크 / MP3 파일 업로드) -->
       <div class="flex border-b border-slate-100 mb-6">
         <button id="tabYt" class="pb-3 px-4 text-xs font-black text-indigo-600 border-b-2 border-indigo-600 transition">
           🔗 유튜브 링크
         </button>
         <button id="tabFile" class="pb-3 px-4 text-xs font-bold text-slate-400 hover:text-slate-600 transition">
-          📁 MP3 파일
+          📁 MP3 파일 직접 업로드
         </button>
       </div>
 
-      <!-- 1. 유튜브 추출 영역 -->
       <div id="ytSection" class="space-y-4">
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1.5">유튜브 영상 주소 (URL)</label>
@@ -161,7 +156,6 @@
         </div>
       </div>
 
-      <!-- 2. MP3 파일 업로드 영역 -->
       <div id="fileSection" class="hidden space-y-4">
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1.5">MP3 파일 선택</label>
@@ -169,7 +163,6 @@
         </div>
       </div>
 
-      <!-- 공통 상세 정보 수정 폼 -->
       <form id="uploadForm" class="mt-6 pt-6 border-t border-slate-100 space-y-4">
         <div class="space-y-3">
           <div>
@@ -188,7 +181,6 @@
           라이브러리에 업로드
         </button>
       </form>
-
     </div>
   </div>
 
@@ -199,11 +191,9 @@
     const openModalBtn = document.getElementById('openModalBtn');
     const closeModalBtn = document.getElementById('closeModalBtn');
 
-    // 모달 열기 / 닫기
     openModalBtn.addEventListener('click', () => uploadModal.classList.remove('hidden'));
     closeModalBtn.addEventListener('click', () => uploadModal.classList.add('hidden'));
 
-    // 실시간 검색 기능
     document.getElementById('searchInput').addEventListener('input', (e) => {
       const keyword = e.target.value.toLowerCase().trim();
       const allMusic = window.getAllMusicList();
@@ -216,7 +206,6 @@
       window.renderMusicList(filtered);
     });
 
-    // 탭 전환
     const tabYt = document.getElementById('tabYt');
     const tabFile = document.getElementById('tabFile');
     const ytSection = document.getElementById('ytSection');
@@ -244,7 +233,6 @@
       return (match && match[2].length === 11) ? match[2] : null;
     }
 
-    // 유튜브 정보 불러오기
     document.getElementById('fetchYtBtn').addEventListener('click', async () => {
       const url = document.getElementById('ytUrlInput').value.trim();
       const videoId = extractVideoId(url);
@@ -275,7 +263,6 @@
       }
     });
 
-    // 최종 업로드
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
@@ -318,7 +305,7 @@
         document.getElementById('uploadForm').reset();
         uploadModal.classList.add('hidden');
       } catch (err) {
-        alert(err.message || "업로드 실패");
+        alert("업로드 실패: " + err.message);
       } finally {
         submitBtn.disabled = false;
         submitBtn.innerText = "라이브러리에 업로드";
