@@ -3,14 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>실시간 음원 라이브러리</title>
+  <title>오노추 - 오늘의 노래 추천</title>
   <script src="https://cdn.tailwindcss.com"></script>
   
   <!-- Firebase SDK 모듈 -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyADfqll8HrBOzgPqYJ3gyZIgvq1WJzC9no",
@@ -24,44 +23,107 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const storage = getStorage(app);
 
     window.db = db;
-    window.storage = storage;
     window.addDoc = addDoc;
     window.collection = collection;
-    window.ref = ref;
-    window.uploadBytes = uploadBytes;
-    window.getDownloadURL = getDownloadURL;
+    window.doc = doc;
+    window.updateDoc = updateDoc;
+    window.increment = increment;
     window.serverTimestamp = serverTimestamp;
 
     let allMusicList = [];
 
-    // 실시간 음원 데이터베이스 구독
+    // 실시간 DB 연동
     const q = query(collection(db, "music_list"), orderBy("createdAt", "desc"));
     onSnapshot(q, (snapshot) => {
       allMusicList = [];
-      snapshot.forEach((doc) => {
-        allMusicList.push({ id: doc.id, ...doc.data() });
+      snapshot.forEach((docSnap) => {
+        allMusicList.push({ id: docSnap.id, ...docSnap.data() });
       });
 
-      document.getElementById("totalCount").innerText = allMusicList.length;
+      // 1. 랜덤 '오노추' 선정 (화면 새로고침/데이터 로드시 1회)
+      if (allMusicList.length > 0 && !window.selectedOnochu) {
+        const randomIndex = Math.floor(Math.random() * allMusicList.length);
+        window.selectedOnochu = allMusicList[randomIndex];
+        renderOnochuCard(window.selectedOnochu);
+      }
+
+      // 2. TOP 10 산정 및 렌더링 (클릭수 클릭 순)
+      const top10 = [...allMusicList]
+        .sort((a, b) => (b.views || 0) - (a.views || 0))
+        .slice(0, 10);
+      renderTop10List(top10);
+
+      // 3. 전체 목록 렌더링
       renderMusicList(allMusicList);
-    }, (error) => {
-      console.error("Firestore 오류:", error);
     });
 
-    // 화면 렌더링 함수
+    // 오노추 헤더 카드 렌더링
+    function renderOnochuCard(music) {
+      const container = document.getElementById("onochuContainer");
+      if (!music) return;
+
+      container.innerHTML = `
+        <div class="relative overflow-hidden bg-gradient-to-r from-indigo-900 via-slate-900 to-purple-950 rounded-3xl p-6 sm:p-10 text-white shadow-2xl border border-indigo-500/30 flex flex-col md:flex-row items-center gap-8">
+          <div class="relative w-full md:w-64 aspect-video md:aspect-square rounded-2xl overflow-hidden shadow-lg border border-white/10 flex-shrink-0">
+            <img src="${music.thumbnail}" class="w-full h-full object-cover" alt="cover">
+            <div class="absolute inset-0 bg-black/20"></div>
+          </div>
+          <div class="flex-1 text-center md:text-left space-y-3 w-full">
+            <span class="inline-block px-3 py-1 bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 rounded-full text-xs font-black tracking-widest uppercase">
+              ✨ TODAY'S PICK
+            </span>
+            <h2 class="text-3xl sm:text-4xl font-black tracking-tight text-white line-clamp-2">${music.title}</h2>
+            <p class="text-base text-slate-300 font-semibold">${music.artist}</p>
+            <div class="pt-4">
+              <audio controls class="w-full h-11 rounded-xl bg-white/10 backdrop-blur-md" onplay="handlePlayCount('${music.id}')">
+                <source src="${music.fileUrl}" type="audio/mp3">
+              </audio>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // TOP 10 렌더링
+    function renderTop10List(list) {
+      const container = document.getElementById("top10Container");
+      container.innerHTML = "";
+
+      if (list.length === 0) {
+        container.innerHTML = `<p class="text-slate-400 text-xs font-bold py-4">인기곡 데이터가 없습니다.</p>`;
+        return;
+      }
+
+      list.forEach((music, index) => {
+        const item = document.createElement("div");
+        item.className = "flex-shrink-0 w-44 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm hover:shadow-md transition group";
+        
+        item.innerHTML = `
+          <div class="relative w-full aspect-video rounded-xl overflow-hidden mb-2 bg-slate-100">
+            <span class="absolute top-1.5 left-1.5 z-10 bg-indigo-600 text-white font-black text-xs px-2 py-0.5 rounded-lg shadow-md">
+              ${index + 1}위
+            </span>
+            <img src="${music.thumbnail}" class="w-full h-full object-cover group-hover:scale-105 transition" alt="cover">
+          </div>
+          <h4 class="font-bold text-xs text-slate-900 truncate" title="${music.title}">${music.title}</h4>
+          <p class="text-[11px] text-slate-500 font-semibold truncate mt-0.5">${music.artist}</p>
+          <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[10px] text-indigo-600 font-bold">
+            <span>🎧 ${music.views || 0}회 재생</span>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    // 전체 리스트 렌더링
     window.renderMusicList = function(list) {
       const container = document.getElementById("musicListContainer");
       container.innerHTML = "";
 
       if (list.length === 0) {
-        container.innerHTML = `
-          <div class="col-span-full text-center py-20">
-            <p class="text-slate-400 font-bold text-sm">등록된 음원이 없습니다.</p>
-          </div>
-        `;
+        container.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 font-bold text-sm">등록된 노래가 없습니다.</div>`;
         return;
       }
 
@@ -71,80 +133,96 @@
         
         card.innerHTML = `
           <div>
-            <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-100 mb-3 border border-slate-100">
-              <img src="${music.thumbnail || 'https://via.placeholder.com/300'}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" alt="cover">
+            <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-100 mb-3">
+              <img src="${music.thumbnail}" class="w-full h-full object-cover group-hover:scale-105 transition" alt="cover">
             </div>
             <h3 class="font-bold text-slate-900 text-sm truncate" title="${music.title}">${music.title}</h3>
             <p class="text-xs text-slate-500 font-semibold mt-0.5 mb-3 truncate">${music.artist}</p>
           </div>
-          
           <div class="space-y-2">
-            <audio controls class="w-full h-9 rounded-lg">
+            <audio controls class="w-full h-9 rounded-lg" onplay="handlePlayCount('${music.id}')">
               <source src="${music.fileUrl}" type="audio/mp3">
             </audio>
-            
-            <!-- 다운로드 버튼 추가 -->
-            <a href="${music.fileUrl}" download="${music.title}.mp3" target="_blank" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold py-2 rounded-xl transition flex items-center justify-center gap-1">
-              <span>⬇️ MP3 다운로드</span>
-            </a>
+            <div class="text-[10px] text-slate-400 text-right font-semibold">
+              재생수 ${music.views || 0}회
+            </div>
           </div>
         `;
         container.appendChild(card);
       });
     };
 
+    // 재생 클릭 시 클릭수(조회수) 증가
+    window.handlePlayCount = async function(id) {
+      try {
+        const musicRef = window.doc(window.db, "music_list", id);
+        await window.updateDoc(musicRef, {
+          views: window.increment(1)
+        });
+      } catch (e) {
+        console.error("클릭수 업데이트 실패:", e);
+      }
+    };
+
     window.getAllMusicList = () => allMusicList;
   </script>
 </head>
-<body class="bg-slate-50 text-slate-800 font-sans min-h-screen pb-16 antialiased">
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen pb-20 antialiased">
 
-  <!-- 상단 내비게이션 바 -->
+  <!-- 내비게이션 바 -->
   <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
     <div class="flex items-center gap-4 flex-1 max-w-xl">
-      <h1 class="text-lg font-black text-slate-900 tracking-tight whitespace-nowrap">🎵 MP3 Hub</h1>
+      <h1 class="text-xl font-black text-indigo-600 tracking-tight whitespace-nowrap">🔥 오노추</h1>
       <div class="relative w-full">
-        <input type="text" id="searchInput" placeholder="제목이나 가수 이름 검색..." class="w-full bg-slate-100 border border-slate-200 rounded-full pl-9 pr-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
+        <input type="text" id="searchInput" placeholder="노래 제목이나 가수 검색..." class="w-full bg-slate-100 border border-slate-200 rounded-full pl-9 pr-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
         <span class="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
       </div>
     </div>
 
     <button id="openModalBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2 rounded-full text-xs transition shadow-sm flex items-center gap-1.5 whitespace-nowrap">
       <span>+</span>
-      <span>음원 업로드</span>
+      <span>링크 업로드</span>
     </button>
   </header>
 
-  <!-- 메인 라이브러리 컨테이너 -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-8 pt-8">
-    <div class="flex items-center justify-between mb-6">
-      <h2 class="text-base font-black text-slate-900 flex items-center gap-2">
-        <span>전체 음원 목록</span>
-        <span id="totalCount" class="text-xs bg-indigo-50 text-indigo-600 border border-indigo-100 font-bold px-2 py-0.5 rounded-full">0</span>
-      </h2>
-    </div>
+  <main class="max-w-7xl mx-auto px-4 sm:px-8 pt-8 space-y-10">
+    
+    <!-- 1. 대문짝만한 오늘의 노래 추천(오노추) 히어로 섹션 -->
+    <section id="onochuContainer">
+      <div class="bg-slate-200 animate-pulse rounded-3xl h-64 w-full"></div>
+    </section>
 
-    <div id="musicListContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-    </div>
+    <!-- 2. 인기 노래 TOP 10 섹션 (가로 스크롤) -->
+    <section>
+      <h3 class="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+        <span>🔥 인기 노래 TOP 10</span>
+      </h3>
+      <div id="top10Container" class="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+        <!-- JS로 1위~10위 카드 출력 -->
+      </div>
+    </section>
+
+    <!-- 3. 전체 노래 목록 -->
+    <section>
+      <h3 class="text-lg font-black text-slate-900 mb-4">
+        <span>🎵 최근 올라온 노래</span>
+      </h3>
+      <div id="musicListContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+        <!-- JS로 전체 목록 출력 -->
+      </div>
+    </section>
+
   </main>
 
-  <!-- 업로드 모달 -->
+  <!-- 유튜브 링크 업로드 모달 -->
   <div id="uploadModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-white border border-slate-200 w-full max-w-lg rounded-3xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+    <div class="bg-white border border-slate-200 w-full max-w-lg rounded-3xl p-6 shadow-2xl relative">
       <button id="closeModalBtn" class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
 
-      <h2 class="text-lg font-black text-slate-900 mb-1">🎵 새로운 음원 추가</h2>
-      <p class="text-xs text-slate-500 mb-6">유튜브 링크 또는 MP3 파일을 라이브러리에 등록하세요.</p>
+      <h2 class="text-lg font-black text-slate-900 mb-1">🔗 오노추 링크 등록</h2>
+      <p class="text-xs text-slate-500 mb-6">유튜브 주소를 입력해 노래를 등록해 보세요.</p>
 
-      <div class="flex border-b border-slate-100 mb-6">
-        <button id="tabYt" class="pb-3 px-4 text-xs font-black text-indigo-600 border-b-2 border-indigo-600 transition">
-          🔗 유튜브 링크
-        </button>
-        <button id="tabFile" class="pb-3 px-4 text-xs font-bold text-slate-400 hover:text-slate-600 transition">
-          📁 MP3 파일 직접 업로드
-        </button>
-      </div>
-
-      <div id="ytSection" class="space-y-4">
+      <div class="space-y-4">
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1.5">유튜브 영상 주소 (URL)</label>
           <div class="flex gap-2">
@@ -154,39 +232,28 @@
             </button>
           </div>
         </div>
-      </div>
 
-      <div id="fileSection" class="hidden space-y-4">
-        <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1.5">MP3 파일 선택</label>
-          <input type="file" id="fileInput" accept="audio/mp3, audio/*" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-600 file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
-        </div>
-      </div>
-
-      <form id="uploadForm" class="mt-6 pt-6 border-t border-slate-100 space-y-4">
-        <div class="space-y-3">
+        <form id="uploadForm" class="pt-4 border-t border-slate-100 space-y-3">
           <div>
             <label class="block text-xs font-bold text-slate-700 mb-1">노래 제목</label>
-            <input type="text" id="titleInput" required placeholder="곡 제목을 입력하세요" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-bold">
+            <input type="text" id="titleInput" required placeholder="곡 제목" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-bold">
           </div>
           <div>
             <label class="block text-xs font-bold text-slate-700 mb-1">가수 이름</label>
-            <input type="text" id="artistInput" required placeholder="가수/채널명을 입력하세요" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-bold">
+            <input type="text" id="artistInput" required placeholder="가수명" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-bold">
           </div>
-        </div>
 
-        <input type="hidden" id="thumbnailInput" value="https://via.placeholder.com/300">
+          <input type="hidden" id="thumbnailInput" value="https://via.placeholder.com/300">
 
-        <button type="submit" id="submitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3 rounded-xl text-xs transition shadow-sm mt-4">
-          라이브러리에 업로드
-        </button>
-      </form>
+          <button type="submit" id="submitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3 rounded-xl text-xs transition shadow-sm mt-4">
+            오노추 등록하기
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 
   <script>
-    let activeTab = 'yt';
-
     const uploadModal = document.getElementById('uploadModal');
     const openModalBtn = document.getElementById('openModalBtn');
     const closeModalBtn = document.getElementById('closeModalBtn');
@@ -194,37 +261,15 @@
     openModalBtn.addEventListener('click', () => uploadModal.classList.remove('hidden'));
     closeModalBtn.addEventListener('click', () => uploadModal.classList.add('hidden'));
 
+    // 검색 기능
     document.getElementById('searchInput').addEventListener('input', (e) => {
       const keyword = e.target.value.toLowerCase().trim();
       const allMusic = window.getAllMusicList();
-
       const filtered = allMusic.filter(m => 
         m.title.toLowerCase().includes(keyword) || 
         m.artist.toLowerCase().includes(keyword)
       );
-
       window.renderMusicList(filtered);
-    });
-
-    const tabYt = document.getElementById('tabYt');
-    const tabFile = document.getElementById('tabFile');
-    const ytSection = document.getElementById('ytSection');
-    const fileSection = document.getElementById('fileSection');
-
-    tabYt.addEventListener('click', () => {
-      activeTab = 'yt';
-      tabYt.className = "pb-3 px-4 text-xs font-black text-indigo-600 border-b-2 border-indigo-600 transition";
-      tabFile.className = "pb-3 px-4 text-xs font-bold text-slate-400 hover:text-slate-600 transition";
-      ytSection.classList.remove('hidden');
-      fileSection.classList.add('hidden');
-    });
-
-    tabFile.addEventListener('click', () => {
-      activeTab = 'file';
-      tabFile.className = "pb-3 px-4 text-xs font-black text-indigo-600 border-b-2 border-indigo-600 transition";
-      tabYt.className = "pb-3 px-4 text-xs font-bold text-slate-400 hover:text-slate-600 transition";
-      fileSection.classList.remove('hidden');
-      ytSection.classList.add('hidden');
     });
 
     function extractVideoId(url) {
@@ -233,6 +278,7 @@
       return (match && match[2].length === 11) ? match[2] : null;
     }
 
+    // 유튜브 정보 불러오기
     document.getElementById('fetchYtBtn').addEventListener('click', async () => {
       const url = document.getElementById('ytUrlInput').value.trim();
       const videoId = extractVideoId(url);
@@ -251,9 +297,9 @@
           document.getElementById('titleInput').value = data.title;
           document.getElementById('artistInput').value = data.author_name;
           document.getElementById('thumbnailInput').value = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-          alert("정보를 성공적으로 불러왔습니다!");
+          alert("노래 정보를 성공적으로 불러왔습니다!");
         } else {
-          alert("정보를 가져올 수 없습니다.");
+          alert("정보를 가져올 수 없는 링크입니다.");
         }
       } catch (err) {
         alert("오류가 발생했습니다.");
@@ -263,52 +309,43 @@
       }
     });
 
+    // 최종 등록
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
       const title = document.getElementById('titleInput').value.trim();
       const artist = document.getElementById('artistInput').value.trim();
       const thumbnail = document.getElementById('thumbnailInput').value;
+      const ytUrl = document.getElementById('ytUrlInput').value.trim();
+      const videoId = extractVideoId(ytUrl);
       const submitBtn = document.getElementById('submitBtn');
 
+      if (!videoId) return alert("유튜브 링크를 올바르게 입력해 주세요.");
+
       submitBtn.disabled = true;
-      submitBtn.innerText = "업로드 중...";
+      submitBtn.innerText = "등록 중...";
 
       try {
-        let finalFileUrl = "";
-
-        if (activeTab === 'yt') {
-          const ytUrl = document.getElementById('ytUrlInput').value.trim();
-          const videoId = extractVideoId(ytUrl);
-          if (!videoId) throw new Error("유튜브 링크를 확인해주세요.");
-
-          finalFileUrl = `https://api.vevioz.com/api/button/mp3/${videoId}`;
-        } else {
-          const fileInput = document.getElementById('fileInput');
-          const file = fileInput.files[0];
-          if (!file) throw new Error("MP3 파일을 선택해 주세요.");
-
-          const storageRef = window.ref(window.storage, `musics/${Date.now()}_${file.name}`);
-          const snapshot = await window.uploadBytes(storageRef, file);
-          finalFileUrl = await window.getDownloadURL(snapshot.ref);
-        }
+        const finalFileUrl = `https://api.vevioz.com/api/button/mp3/${videoId}`;
 
         await window.addDoc(window.collection(window.db, "music_list"), {
           title: title,
           artist: artist,
           thumbnail: thumbnail,
           fileUrl: finalFileUrl,
+          views: 0,
           createdAt: window.serverTimestamp()
         });
 
-        alert("업로드가 완료되었습니다!");
+        alert("성공적으로 등록되었습니다!");
         document.getElementById('uploadForm').reset();
+        document.getElementById('ytUrlInput').value = "";
         uploadModal.classList.add('hidden');
       } catch (err) {
-        alert("업로드 실패: " + err.message);
+        alert("등록 실패: " + err.message);
       } finally {
         submitBtn.disabled = false;
-        submitBtn.innerText = "라이브러리에 업로드";
+        submitBtn.innerText = "오노추 등록하기";
       }
     });
   </script>
