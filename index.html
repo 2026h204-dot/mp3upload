@@ -10,6 +10,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyADfqll8HrBOzgPqYJ3gyZIgvq1WJzC9no",
@@ -23,6 +24,8 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
 
     window.db = db;
     window.addDoc = addDoc;
@@ -32,6 +35,65 @@
     window.deleteDoc = deleteDoc;
     window.increment = increment;
     window.serverTimestamp = serverTimestamp;
+
+    // 인증 상태 모니터링 및 실명 UI 처리
+    let currentUser = null;
+
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      const loginBtn = document.getElementById("loginBtn");
+      const userProfile = document.getElementById("userProfile");
+      const userName = document.getElementById("userName");
+      const userAvatar = document.getElementById("userAvatar");
+      const uploaderInput = document.getElementById("uploaderInput");
+
+      if (user) {
+        // 로그인 성공 시 UI 업데이트
+        loginBtn.classList.add("hidden");
+        userProfile.classList.remove("hidden");
+        userProfile.classList.add("flex");
+        
+        userName.innerText = user.displayName || "구글 사용자";
+        if (user.photoURL) {
+          userAvatar.src = user.photoURL;
+        }
+        
+        // 업로드 폼의 추천인 필드에 실명 자동 입력
+        if (uploaderInput) {
+          uploaderInput.value = user.displayName || "";
+          uploaderInput.readOnly = true;
+        }
+      } else {
+        // 로그아웃 상태 UI
+        loginBtn.classList.remove("hidden");
+        userProfile.classList.add("hidden");
+        userProfile.classList.remove("flex");
+
+        if (uploaderInput) {
+          uploaderInput.value = "";
+          uploaderInput.readOnly = false;
+        }
+      }
+    });
+
+    // 구글 로그인 함수
+    window.loginWithGoogle = async function() {
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (error) {
+        console.error("로그인 실패:", error);
+        alert("구글 로그인 실패: " + error.message);
+      }
+    };
+
+    // 로그아웃 함수
+    window.logoutGoogle = async function() {
+      try {
+        await signOut(auth);
+      } catch (error) {
+        alert("로그아웃 실패: " + error.message);
+      }
+    };
 
     let allMusicList = [];
 
@@ -43,7 +105,6 @@
         allMusicList.push({ id: docSnap.id, ...docSnap.data() });
       });
 
-      // 1. 선택된 오노추 삭제 시 재선정 또는 최초 선정
       if (allMusicList.length > 0) {
         if (!window.selectedOnochu || !allMusicList.some(m => m.id === window.selectedOnochu.id)) {
           const randomIndex = Math.floor(Math.random() * allMusicList.length);
@@ -54,17 +115,16 @@
         document.getElementById("onochuContainer").innerHTML = `<div class="bg-slate-900 rounded-3xl p-8 text-center text-slate-400 font-bold">등록된 노래가 없습니다. 첫 노래를 공유해 보세요!</div>`;
       }
 
-      // 2. TOP 10 산정 (재생수 기준)
       const top10 = [...allMusicList]
         .sort((a, b) => (b.views || 0) - (a.views || 0))
         .slice(0, 10);
       renderTop10List(top10);
 
-      // 3. 전체 목록 렌더링
       renderMusicList(allMusicList);
+    }, (error) => {
+      console.error("Firestore 연결 실패:", error);
     });
 
-    // 오노추 메인 대형 카드 렌더링
     function renderOnochuCard(music) {
       const container = document.getElementById("onochuContainer");
       if (!music) return;
@@ -100,7 +160,6 @@
       `;
     }
 
-    // TOP 10 렌더링
     function renderTop10List(list) {
       const container = document.getElementById("top10Container");
       container.innerHTML = "";
@@ -141,7 +200,6 @@
       });
     }
 
-    // 전체 리스트 렌더링
     window.renderMusicList = function(list) {
       const container = document.getElementById("musicListContainer");
       container.innerHTML = "";
@@ -184,7 +242,6 @@
       });
     };
 
-    // 삭제 기능
     window.deleteMusic = async function(id, title) {
       if (confirm(`'${title}' 노래를 정말로 삭제하시겠습니까?`)) {
         try {
@@ -196,7 +253,6 @@
       }
     };
 
-    // 클릭수 증가
     window.handlePlayCount = async function(id) {
       try {
         const musicRef = window.doc(window.db, "music_list", id);
@@ -223,40 +279,48 @@
       </div>
     </div>
 
-    <button id="openModalBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2 rounded-full text-xs transition shadow-sm flex items-center gap-1.5 whitespace-nowrap">
-      <span>+</span>
-      <span>링크 업로드</span>
-    </button>
+    <div class="flex items-center gap-3">
+      <!-- 구글 로그인 버튼 -->
+      <button id="loginBtn" onclick="loginWithGoogle()" class="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold px-3 py-1.5 rounded-full text-xs transition shadow-sm flex items-center gap-2">
+        <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+        <span>구글 로그인</span>
+      </button>
+
+      <!-- 사용자 프로필 (로그인 시 표시) -->
+      <div id="userProfile" class="hidden items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full">
+        <img id="userAvatar" src="" class="w-6 h-6 rounded-full object-cover">
+        <span id="userName" class="text-xs font-bold text-slate-700"></span>
+        <button onclick="logoutGoogle()" class="text-[10px] text-slate-400 hover:text-red-600 font-bold ml-1">로그아웃</button>
+      </div>
+
+      <button id="openModalBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2 rounded-full text-xs transition shadow-sm flex items-center gap-1.5 whitespace-nowrap">
+        <span>+</span>
+        <span>링크 업로드</span>
+      </button>
+    </div>
   </header>
 
   <main class="max-w-7xl mx-auto px-4 sm:px-8 pt-8 space-y-10">
-    
-    <!-- 1. 대형 '오늘의 노래 추천' 섹션 -->
     <section id="onochuContainer">
       <div class="bg-slate-200 animate-pulse rounded-3xl h-64 w-full"></div>
     </section>
 
-    <!-- 2. 인기 노래 TOP 10 섹션 -->
     <section>
       <h3 class="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
         <span>🔥 인기 노래 TOP 10</span>
       </h3>
-      <div id="top10Container" class="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-      </div>
+      <div id="top10Container" class="flex gap-4 overflow-x-auto pb-4 scrollbar-hide"></div>
     </section>
 
-    <!-- 3. 전체 노래 목록 -->
     <section>
       <h3 class="text-lg font-black text-slate-900 mb-4">
         <span>🎵 최근 올라온 노래</span>
       </h3>
-      <div id="musicListContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-      </div>
+      <div id="musicListContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"></div>
     </section>
-
   </main>
 
-  <!-- 유튜브 링크 업로드 모달 -->
+  <!-- 업로드 모달 -->
   <div id="uploadModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-white border border-slate-200 w-full max-w-lg rounded-3xl p-6 shadow-2xl relative">
       <button id="closeModalBtn" class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
@@ -277,7 +341,7 @@
 
         <form id="uploadForm" class="pt-4 border-t border-slate-100 space-y-3">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">작성자 (닉네임)</label>
+            <label class="block text-xs font-bold text-slate-700 mb-1">작성자 (구글 로그인을 하면 실명이 고정됩니다)</label>
             <input type="text" id="uploaderInput" required placeholder="추천인 이름/닉네임" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-bold">
           </div>
           <div>
@@ -305,7 +369,6 @@
     openModalBtn.addEventListener('click', () => uploadModal.classList.remove('hidden'));
     closeModalBtn.addEventListener('click', () => uploadModal.classList.add('hidden'));
 
-    // 검색 기능
     document.getElementById('searchInput').addEventListener('input', (e) => {
       const keyword = e.target.value.toLowerCase().trim();
       const allMusic = window.getAllMusicList();
@@ -323,7 +386,6 @@
       return (match && match[2].length === 11) ? match[2] : null;
     }
 
-    // 유튜브 정보 불러오기
     document.getElementById('fetchYtBtn').addEventListener('click', async () => {
       const url = document.getElementById('ytUrlInput').value.trim();
       const videoId = extractVideoId(url);
@@ -353,7 +415,6 @@
       }
     });
 
-    // 최종 등록
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
