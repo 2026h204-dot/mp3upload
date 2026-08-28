@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>실시간 유튜브 MP3 공유 플레이어</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Firebase SDK 모듈 -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+    // 전달받으신 Firebase 설정 적용
+    const firebaseConfig = {
+      apiKey: "AIzaSyADfqll8HrBOzgPqYJ3gyZIgvq1WJzC9no",
+      authDomain: "mp3upload-7cbc9.firebaseapp.com",
+      projectId: "mp3upload-7cbc9",
+      storageBucket: "mp3upload-7cbc9.firebasestorage.app",
+      messagingSenderId: "1084960007120",
+      appId: "1:1084960007120:web:2dbf711f9d1f9a85350fd5",
+      measurementId: "G-81S0J2LRT2"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    window.db = db;
+    window.storage = storage;
+    window.addDoc = addDoc;
+    window.collection = collection;
+    window.ref = ref;
+    window.uploadBytes = uploadBytes;
+    window.getDownloadURL = getDownloadURL;
+    window.serverTimestamp = serverTimestamp;
+
+    // 실시간 음원 목록 불러오기 (접속한 모든 사용자 공통)
+    const q = query(collection(db, "music_list"), orderBy("createdAt", "desc"));
+    onSnapshot(q, (snapshot) => {
+      const musicListContainer = document.getElementById("musicList");
+      musicListContainer.innerHTML = "";
+
+      if (snapshot.empty) {
+        musicListContainer.innerHTML = `<p class="text-center text-slate-500 py-12 text-sm font-medium">아직 등록된 음원이 없습니다. 위에서 추가해 보세요!</p>`;
+        return;
+      }
+
+      snapshot.forEach((doc) => {
+        const music = doc.data();
+        const card = document.createElement("div");
+        card.className = "bg-white border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm hover:shadow-md transition";
+        
+        card.innerHTML = `
+          <div class="flex items-center gap-4 w-full md:w-auto">
+            <img src="${music.thumbnail || 'https://via.placeholder.com/60'}" class="w-14 h-14 object-cover rounded-xl border border-slate-100 flex-shrink-0" alt="cover">
+            <div class="overflow-hidden">
+              <h3 class="font-bold text-slate-900 text-sm truncate max-w-xs">${music.title}</h3>
+              <p class="text-xs text-slate-500 font-semibold mt-0.5">${music.artist}</p>
+            </div>
+          </div>
+          <audio controls class="w-full md:w-80 h-10 rounded-lg">
+            <source src="${music.fileUrl}" type="audio/mp3">
+            브라우저가 오디오 재생을 지원하지 않습니다.
+          </audio>
+        `;
+        musicListContainer.appendChild(card);
+      });
+    });
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen pb-16 antialiased">
+
+  <div class="max-w-4xl mx-auto pt-10 px-4">
+    
+    <!-- 헤더 -->
+    <header class="text-center mb-8 border-b border-slate-200 pb-6">
+      <span class="text-xs font-bold tracking-widest text-indigo-600 uppercase">Realtime Cloud Player</span>
+      <h1 class="text-3xl font-black text-slate-900 mt-1 tracking-tight">음원 공유 플레이어</h1>
+      <p class="text-xs text-slate-500 mt-2">유튜브 링크나 MP3 파일을 등록하여 실시간으로 함께 감상해보세요.</p>
+    </header>
+
+    <!-- 입력 카드 -->
+    <div class="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm mb-10">
+      
+      <!-- 탭 선택 (유튜브 링크 / MP3 파일 업로드) -->
+      <div class="flex border-b border-slate-100 mb-6">
+        <button id="tabYt" class="pb-3 px-4 text-xs font-black text-indigo-600 border-b-2 border-indigo-600 transition">
+          🔗 유튜브 링크 추가
+        </button>
+        <button id="tabFile" class="pb-3 px-4 text-xs font-bold text-slate-400 hover:text-slate-600 transition">
+          📁 파일 직접 업로드
+        </button>
+      </div>
+
+      <!-- 1. 유튜브 추출 영역 -->
+      <div id="ytSection" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">유튜브 영상 주소 (URL)</label>
+          <div class="flex gap-2">
+            <input type="url" id="ytUrlInput" placeholder="https://www.youtube.com/watch?v=..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-mono">
+            <button id="fetchYtBtn" class="px-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold whitespace-nowrap transition">
+              정보 불러오기
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. MP3 파일 업로드 영역 (초기 숨김) -->
+      <div id="fileSection" class="hidden space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">MP3 파일 선택</label>
+          <input type="file" id="fileInput" accept="audio/mp3, audio/*" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-600 file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+        </div>
+      </div>
+
+      <!-- 공통 상세 정보 수정 폼 -->
+      <form id="uploadForm" class="mt-6 pt-6 border-t border-slate-100 space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1.5">노래 제목 (수정 가능)</label>
+            <input type="text" id="titleInput" required placeholder="곡 제목을 입력하세요" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-bold">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1.5">가수 이름 (수정 가능)</label>
+            <input type="text" id="artistInput" required placeholder="가수/채널명을 입력하세요" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-bold">
+          </div>
+        </div>
+
+        <input type="hidden" id="thumbnailInput" value="https://via.placeholder.com/150">
+        <input type="hidden" id="convertedAudioUrl" value="">
+
+        <button type="submit" id="submitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold py-3 rounded-xl text-xs transition shadow-sm mt-2">
+          공유 플레이어에 추가하기
+        </button>
+      </form>
+    </div>
+
+    <!-- 실시간 목록 -->
+    <section>
+      <h2 class="text-base font-black text-slate-900 mb-4 flex items-center gap-2">
+        <span>라이브 공유 트랙</span>
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      </h2>
+      <div id="musicList" class="space-y-3">
+        <!-- JS로 실시간 목록 출력 -->
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    let activeTab = 'yt';
+
+    const tabYt = document.getElementById('tabYt');
+    const tabFile = document.getElementById('tabFile');
+    const ytSection = document.getElementById('ytSection');
+    const fileSection = document.getElementById('fileSection');
+
+    // 탭 전환 이벤트
+    tabYt.addEventListener('click', () => {
+      activeTab = 'yt';
+      tabYt.className = "pb-3 px-4 text-xs font-black text-indigo-600 border-b-2 border-indigo-600 transition";
+      tabFile.className = "pb-3 px-4 text-xs font-bold text-slate-400 hover:text-slate-600 transition";
+      ytSection.classList.remove('hidden');
+      fileSection.classList.add('hidden');
+    });
+
+    tabFile.addEventListener('click', () => {
+      activeTab = 'file';
+      tabFile.className = "pb-3 px-4 text-xs font-black text-indigo-600 border-b-2 border-indigo-600 transition";
+      tabYt.className = "pb-3 px-4 text-xs font-bold text-slate-400 hover:text-slate-600 transition";
+      fileSection.classList.remove('hidden');
+      ytSection.classList.add('hidden');
+    });
+
+    // 유튜브 URL에서 영상 ID 추출
+    function extractVideoId(url) {
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+      const match = url.match(regExp);
+      return (match && match[2].length === 11) ? match[2] : null;
+    }
+
+    // 유튜브 메타데이터 자동 가져오기
+    document.getElementById('fetchYtBtn').addEventListener('click', async () => {
+      const url = document.getElementById('ytUrlInput').value.trim();
+      const videoId = extractVideoId(url);
+
+      if (!videoId) return alert("유효한 유튜브 링크를 입력해 주세요.");
+
+      const fetchBtn = document.getElementById('fetchYtBtn');
+      fetchBtn.disabled = true;
+      fetchBtn.innerText = "불러오는 중...";
+
+      try {
+        // oEmbed API를 이용해 메타데이터 파싱
+        const res = await fetch(`https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`);
+        const data = await res.json();
+
+        if (data.title) {
+          document.getElementById('titleInput').value = data.title;
+          document.getElementById('artistInput').value = data.author_name;
+          document.getElementById('thumbnailInput').value = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+          alert("성공적으로 정보를 불러왔습니다! 이제 제목과 가수를 원하는 대로 변경한 후 추가해 주세요.");
+        } else {
+          alert("정보를 가져올 수 없는 영상입니다.");
+        }
+      } catch (err) {
+        alert("메타데이터를 가져오는 중 오류가 발생했습니다.");
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.innerText = "정보 불러오기";
+      }
+    });
+
+    // 최종 등록 처리
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const title = document.getElementById('titleInput').value.trim();
+      const artist = document.getElementById('artistInput').value.trim();
+      const thumbnail = document.getElementById('thumbnailInput').value;
+      const submitBtn = document.getElementById('submitBtn');
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = "공유 플레이어에 추가 중...";
+
+      try {
+        let finalFileUrl = "";
+
+        if (activeTab === 'yt') {
+          const ytUrl = document.getElementById('ytUrlInput').value.trim();
+          const videoId = extractVideoId(ytUrl);
+          if (!videoId) throw new Error("유튜브 링크가 바르지 않습니다.");
+
+          // 공개 변환 오디오 엔진 API 스트림
+          finalFileUrl = `https://api.vevioz.com/api/button/mp3/${videoId}`;
+        } else {
+          const fileInput = document.getElementById('fileInput');
+          const file = fileInput.files[0];
+          if (!file) throw new Error("MP3 파일을 선택해 주세요.");
+
+          // Firebase Storage에 내장 파일 업로드
+          const storageRef = window.ref(window.storage, `musics/${Date.now()}_${file.name}`);
+          const snapshot = await window.uploadBytes(storageRef, file);
+          finalFileUrl = await window.getDownloadURL(snapshot.ref);
+        }
+
+        // Firestore 실시간 데이터베이스에 최종 추가
+        await window.addDoc(window.collection(window.db, "music_list"), {
+          title: title,
+          artist: artist,
+          thumbnail: thumbnail,
+          fileUrl: finalFileUrl,
+          createdAt: window.serverTimestamp()
+        });
+
+        alert("성공적으로 추가되었습니다!");
+        document.getElementById('uploadForm').reset();
+        document.getElementById('ytUrlInput').value = "";
+      } catch (err) {
+        alert(err.message || "등록 중 오류가 발생했습니다.");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = "공유 플레이어에 추가하기";
+      }
+    });
+  </script>
+</body>
+</html>
