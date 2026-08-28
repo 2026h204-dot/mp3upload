@@ -69,11 +69,18 @@
       const container = document.getElementById("onochuContainer");
       if (!music) return;
 
+      const thumbUrl = `https://img.youtube.com/vi/${music.videoId}/hqdefault.jpg`;
+
       container.innerHTML = `
-        <div class="relative overflow-hidden bg-gradient-to-r from-indigo-900 via-slate-900 to-purple-950 rounded-3xl p-6 sm:p-8 text-white shadow-2xl border border-indigo-500/30 flex flex-col lg:flex-row items-center gap-6">
-          <div class="w-full lg:w-1/2 aspect-video rounded-2xl overflow-hidden shadow-lg border border-white/10 flex-shrink-0">
-            <iframe src="https://www.youtube.com/embed/${music.videoId}" class="w-full h-full border-0" allowfullscreen></iframe>
-          </div>
+        <div class="relative overflow-hidden bg-gradient-to-r from-indigo-950 via-slate-900 to-purple-950 rounded-3xl p-6 sm:p-8 text-white shadow-2xl border border-indigo-500/30 flex flex-col lg:flex-row items-center gap-6">
+          <a href="https://www.youtube.com/watch?v=${music.videoId}" target="_blank" onclick="handlePlayCount('${music.id}')" class="w-full lg:w-1/2 aspect-video rounded-2xl overflow-hidden shadow-lg border border-white/10 flex-shrink-0 relative group cursor-pointer block">
+            <img src="${thumbUrl}" alt="${music.title}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+            <div class="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition flex items-center justify-center">
+              <div class="w-14 h-14 bg-red-600 rounded-full flex items-center justify-center text-white shadow-xl group-hover:scale-110 transition">
+                <span class="text-xl ml-1">▶</span>
+              </div>
+            </div>
+          </a>
           <div class="flex-1 text-center lg:text-left space-y-3 w-full">
             <div class="flex items-center justify-between">
               <span class="inline-block px-3 py-1 bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 rounded-full text-xs font-black tracking-widest uppercase">
@@ -84,8 +91,8 @@
             <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-white line-clamp-2">${music.title}</h2>
             <p class="text-sm text-slate-300 font-semibold">${music.artist}</p>
             <div class="pt-2 flex flex-wrap gap-3 justify-center lg:justify-start">
-              <a href="https://www.youtube.com/watch?v=${music.videoId}" target="_blank" onclick="handlePlayCount('${music.id}')" class="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition shadow-sm">
-                <span>🔗 유튜브에서 보기</span>
+              <a href="https://www.youtube.com/watch?v=${music.videoId}" target="_blank" onclick="handlePlayCount('${music.id}')" class="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-extrabold transition shadow-md">
+                <span>▶ 유튜브에서 재생하기</span>
               </a>
             </div>
           </div>
@@ -104,23 +111,27 @@
       }
 
       list.forEach((music, index) => {
+        const thumbUrl = `https://img.youtube.com/vi/${music.videoId}/mqdefault.jpg`;
         const item = document.createElement("div");
         item.className = "flex-shrink-0 w-60 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm hover:shadow-md transition group flex flex-col justify-between relative";
         
         item.innerHTML = `
           <div>
-            <div class="relative w-full aspect-video rounded-xl overflow-hidden mb-2 bg-slate-100">
+            <a href="https://www.youtube.com/watch?v=${music.videoId}" target="_blank" onclick="handlePlayCount('${music.id}')" class="relative w-full aspect-video rounded-xl overflow-hidden mb-2 bg-slate-100 block group">
               <span class="absolute top-1.5 left-1.5 z-10 bg-indigo-600 text-white font-black text-xs px-2 py-0.5 rounded-lg shadow-md">
                 ${index + 1}위
               </span>
-              <iframe src="https://www.youtube.com/embed/${music.videoId}" class="w-full h-full border-0" allowfullscreen></iframe>
-            </div>
+              <img src="${thumbUrl}" class="w-full h-full object-cover group-hover:scale-105 transition">
+              <div class="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition flex items-center justify-center">
+                <span class="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white text-xs shadow-md">▶</span>
+              </div>
+            </a>
             <h4 class="font-bold text-xs text-slate-900 truncate" title="${music.title}">${music.title}</h4>
             <p class="text-[11px] text-slate-500 font-semibold truncate mt-0.5">${music.artist}</p>
             <p class="text-[10px] text-indigo-500 font-medium mt-1 truncate">👤 ${music.uploader || '익명'}</p>
           </div>
           <div class="flex items-center justify-between mt-3 pt-2 border-t border-slate-100 text-[10px]">
-            <span class="text-slate-400 font-bold">🎧 ${music.views || 0}회</span>
+            <span class="text-slate-400 font-bold">🎧 ${music.views || 0}회 클릭</span>
             <a href="https://www.youtube.com/watch?v=${music.videoId}" target="_blank" onclick="handlePlayCount('${music.id}')" class="text-red-600 hover:underline font-extrabold flex items-center gap-0.5">
               유튜브 ↗
             </a>
@@ -141,16 +152,22 @@
       }
 
       list.forEach((music) => {
+        const thumbUrl = `https://img.youtube.com/vi/${music.videoId}/mqdefault.jpg`;
         const card = document.createElement("div");
         card.className = "bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition group relative";
         
         card.innerHTML = `
           <div>
-            <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-100 mb-3">
+            <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-100 mb-3 group">
               <button onclick="deleteMusic('${music.id}', '${music.title}')" title="삭제" class="absolute top-2 right-2 z-20 bg-slate-900/80 hover:bg-red-600 text-white rounded-lg p-1.5 transition text-xs flex items-center justify-center">
                 🗑️
               </button>
-              <iframe src="https://www.youtube.com/embed/${music.videoId}" class="w-full h-full border-0" allowfullscreen></iframe>
+              <a href="https://www.youtube.com/watch?v=${music.videoId}" target="_blank" onclick="handlePlayCount('${music.id}')" class="w-full h-full block">
+                <img src="${thumbUrl}" class="w-full h-full object-cover group-hover:scale-105 transition">
+                <div class="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition flex items-center justify-center">
+                  <span class="w-9 h-9 bg-red-600 rounded-full flex items-center justify-center text-white text-xs shadow-md">▶</span>
+                </div>
+              </a>
             </div>
             <h3 class="font-bold text-slate-900 text-sm truncate" title="${music.title}">${music.title}</h3>
             <p class="text-xs text-slate-500 font-semibold mt-0.5 truncate">${music.artist}</p>
@@ -288,7 +305,7 @@
     openModalBtn.addEventListener('click', () => uploadModal.classList.remove('hidden'));
     closeModalBtn.addEventListener('click', () => uploadModal.classList.add('hidden'));
 
-    // 검색 기능 (제목, 가수, 작성자 검색 지원)
+    // 검색 기능
     document.getElementById('searchInput').addEventListener('input', (e) => {
       const keyword = e.target.value.toLowerCase().trim();
       const allMusic = window.getAllMusicList();
