@@ -142,7 +142,6 @@
       console.error("Firestore 연결 실패:", error);
     });
 
-    // 🔗 단순하고 확실한 유튜브 이동 함수
     window.openYoutube = function(id, videoId) {
       if (id && window.db) {
         try {
@@ -155,7 +154,6 @@
       window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank');
     };
 
-    // 상단 픽 카드 (텍스트 스타일 굵은 카드)
     function renderOnochuCard(music) {
       const container = document.getElementById("onochuContainer");
       if (!music) return;
@@ -169,8 +167,8 @@
             <span class="text-xs text-indigo-200 font-semibold">👤 ${music.uploader || '익명'} 추천</span>
           </div>
           <div class="space-y-2">
-            <h2 class="text-3xl font-black text-white group-hover:text-indigo-300 transition line-clamp-1">${music.title}</h2>
-            <p class="text-lg text-slate-300 font-bold">${music.artist}</p>
+            <h2 class="text-2xl sm:text-3xl font-black text-white group-hover:text-indigo-300 transition line-clamp-1">${music.title}</h2>
+            <p class="text-base sm:text-lg text-slate-300 font-bold">${music.artist}</p>
           </div>
           <div class="mt-6 flex items-center justify-between pt-4 border-t border-white/10">
             <span class="text-xs text-slate-400">🎧 조회수 ${music.views || 0}회</span>
@@ -182,7 +180,6 @@
       `;
     }
 
-    // TOP 10 박스 리스트
     function renderTop10List(list) {
       const container = document.getElementById("top10Container");
       container.innerHTML = "";
@@ -231,7 +228,6 @@
       renderMusicList(filtered);
     };
 
-    // 일반 노래 박스 목록 (클릭 시 이동)
     window.renderMusicList = function(list) {
       const container = document.getElementById("musicListContainer");
       if (!container) return;
@@ -246,9 +242,8 @@
         const card = document.createElement("div");
         card.className = "bg-white border border-slate-200 hover:border-indigo-400 rounded-2xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition cursor-pointer group relative";
         
-        // 클릭 시 유튜브 이동
         card.onclick = (e) => {
-          if (e.target.tagName === 'BUTTON') return; // 삭제 버튼 클릭 시 예외
+          if (e.target.tagName === 'BUTTON') return;
           window.openYoutube(music.id, music.videoId);
         };
 
@@ -335,7 +330,7 @@
         <h3 class="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
           <span>🔥 인기 노래 TOP 10</span>
         </h3>
-        <div id="top10Container" class="flex gap-4 overflow-x-auto pb-4 scrollbar-hide"></div>
+        <div id="top10Container" class="flex gap-4 overflow-x-auto pb-4"></div>
       </section>
 
       <section>
