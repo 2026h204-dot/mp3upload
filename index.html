@@ -9,7 +9,7 @@
   <!-- Firebase SDK 모듈 -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyADfqll8HrBOzgPqYJ3gyZIgvq1WJzC9no",
@@ -29,6 +29,7 @@
     window.collection = collection;
     window.doc = doc;
     window.updateDoc = updateDoc;
+    window.deleteDoc = deleteDoc;
     window.increment = increment;
     window.serverTimestamp = serverTimestamp;
 
@@ -42,11 +43,15 @@
         allMusicList.push({ id: docSnap.id, ...docSnap.data() });
       });
 
-      // 1. 랜덤 '오노추' 선정 (1회)
-      if (allMusicList.length > 0 && !window.selectedOnochu) {
-        const randomIndex = Math.floor(Math.random() * allMusicList.length);
-        window.selectedOnochu = allMusicList[randomIndex];
+      // 1. 선택된 오노추 삭제 시 재선정 또는 최초 선정
+      if (allMusicList.length > 0) {
+        if (!window.selectedOnochu || !allMusicList.some(m => m.id === window.selectedOnochu.id)) {
+          const randomIndex = Math.floor(Math.random() * allMusicList.length);
+          window.selectedOnochu = allMusicList[randomIndex];
+        }
         renderOnochuCard(window.selectedOnochu);
+      } else {
+        document.getElementById("onochuContainer").innerHTML = `<div class="bg-slate-900 rounded-3xl p-8 text-center text-slate-400 font-bold">등록된 노래가 없습니다. 첫 노래를 공유해 보세요!</div>`;
       }
 
       // 2. TOP 10 산정 (재생수 기준)
@@ -67,12 +72,15 @@
       container.innerHTML = `
         <div class="relative overflow-hidden bg-gradient-to-r from-indigo-900 via-slate-900 to-purple-950 rounded-3xl p-6 sm:p-8 text-white shadow-2xl border border-indigo-500/30 flex flex-col lg:flex-row items-center gap-6">
           <div class="w-full lg:w-1/2 aspect-video rounded-2xl overflow-hidden shadow-lg border border-white/10 flex-shrink-0">
-            <iframe src="https://www.youtube.com/embed/${music.videoId}" class="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen onclick="handlePlayCount('${music.id}')"></iframe>
+            <iframe src="https://www.youtube.com/embed/${music.videoId}" class="w-full h-full border-0" allowfullscreen></iframe>
           </div>
           <div class="flex-1 text-center lg:text-left space-y-3 w-full">
-            <span class="inline-block px-3 py-1 bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 rounded-full text-xs font-black tracking-widest uppercase">
-              ✨ TODAY'S PICK
-            </span>
+            <div class="flex items-center justify-between">
+              <span class="inline-block px-3 py-1 bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 rounded-full text-xs font-black tracking-widest uppercase">
+                ✨ TODAY'S PICK
+              </span>
+              <span class="text-xs text-indigo-200 font-semibold">👤 ${music.uploader || '익명'} 추천</span>
+            </div>
             <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-white line-clamp-2">${music.title}</h2>
             <p class="text-sm text-slate-300 font-semibold">${music.artist}</p>
             <div class="pt-2 flex flex-wrap gap-3 justify-center lg:justify-start">
@@ -91,13 +99,13 @@
       container.innerHTML = "";
 
       if (list.length === 0) {
-        container.innerHTML = `<p class="text-slate-400 text-xs font-bold py-4">등록된 노래가 없습니다.</p>`;
+        container.innerHTML = `<p class="text-slate-400 text-xs font-bold py-4">인기곡 데이터가 없습니다.</p>`;
         return;
       }
 
       list.forEach((music, index) => {
         const item = document.createElement("div");
-        item.className = "flex-shrink-0 w-60 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm hover:shadow-md transition group flex flex-col justify-between";
+        item.className = "flex-shrink-0 w-60 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm hover:shadow-md transition group flex flex-col justify-between relative";
         
         item.innerHTML = `
           <div>
@@ -109,9 +117,10 @@
             </div>
             <h4 class="font-bold text-xs text-slate-900 truncate" title="${music.title}">${music.title}</h4>
             <p class="text-[11px] text-slate-500 font-semibold truncate mt-0.5">${music.artist}</p>
+            <p class="text-[10px] text-indigo-500 font-medium mt-1 truncate">👤 ${music.uploader || '익명'}</p>
           </div>
           <div class="flex items-center justify-between mt-3 pt-2 border-t border-slate-100 text-[10px]">
-            <span class="text-slate-400 font-bold">🎧 ${music.views || 0}회 클릭</span>
+            <span class="text-slate-400 font-bold">🎧 ${music.views || 0}회</span>
             <a href="https://www.youtube.com/watch?v=${music.videoId}" target="_blank" onclick="handlePlayCount('${music.id}')" class="text-red-600 hover:underline font-extrabold flex items-center gap-0.5">
               유튜브 ↗
             </a>
@@ -133,17 +142,21 @@
 
       list.forEach((music) => {
         const card = document.createElement("div");
-        card.className = "bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition group";
+        card.className = "bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between shadow-sm hover:shadow-md transition group relative";
         
         card.innerHTML = `
           <div>
             <div class="relative w-full aspect-video rounded-xl overflow-hidden bg-slate-100 mb-3">
+              <button onclick="deleteMusic('${music.id}', '${music.title}')" title="삭제" class="absolute top-2 right-2 z-20 bg-slate-900/80 hover:bg-red-600 text-white rounded-lg p-1.5 transition text-xs flex items-center justify-center">
+                🗑️
+              </button>
               <iframe src="https://www.youtube.com/embed/${music.videoId}" class="w-full h-full border-0" allowfullscreen></iframe>
             </div>
             <h3 class="font-bold text-slate-900 text-sm truncate" title="${music.title}">${music.title}</h3>
-            <p class="text-xs text-slate-500 font-semibold mt-0.5 mb-3 truncate">${music.artist}</p>
+            <p class="text-xs text-slate-500 font-semibold mt-0.5 truncate">${music.artist}</p>
+            <p class="text-[11px] text-indigo-600 font-medium mt-1.5 truncate">👤 추천: ${music.uploader || '익명'}</p>
           </div>
-          <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+          <div class="flex items-center justify-between pt-3 mt-3 border-t border-slate-100">
             <span class="text-[10px] text-slate-400 font-semibold">조회 ${music.views || 0}회</span>
             <a href="https://www.youtube.com/watch?v=${music.videoId}" target="_blank" onclick="handlePlayCount('${music.id}')" class="bg-red-50 hover:bg-red-100 text-red-600 text-[11px] font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1">
               ▶ 유튜브 이동
@@ -152,6 +165,18 @@
         `;
         container.appendChild(card);
       });
+    };
+
+    // 삭제 기능
+    window.deleteMusic = async function(id, title) {
+      if (confirm(`'${title}' 노래를 정말로 삭제하시겠습니까?`)) {
+        try {
+          await window.deleteDoc(window.doc(window.db, "music_list", id));
+          alert("성공적으로 삭제되었습니다.");
+        } catch (e) {
+          alert("삭제 실패: " + e.message);
+        }
+      }
     };
 
     // 클릭수 증가
@@ -176,7 +201,7 @@
     <div class="flex items-center gap-4 flex-1 max-w-xl">
       <h1 class="text-xl font-black text-indigo-600 tracking-tight whitespace-nowrap">🔥 오노추</h1>
       <div class="relative w-full">
-        <input type="text" id="searchInput" placeholder="노래 제목이나 가수 검색..." class="w-full bg-slate-100 border border-slate-200 rounded-full pl-9 pr-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
+        <input type="text" id="searchInput" placeholder="노래, 가수, 작성자 검색..." class="w-full bg-slate-100 border border-slate-200 rounded-full pl-9 pr-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
         <span class="absolute left-3 top-2.5 text-xs text-slate-400">🔍</span>
       </div>
     </div>
@@ -220,7 +245,7 @@
       <button id="closeModalBtn" class="absolute top-5 right-5 text-slate-400 hover:text-slate-600 font-bold text-lg">✕</button>
 
       <h2 class="text-lg font-black text-slate-900 mb-1">🔗 오노추 링크 등록</h2>
-      <p class="text-xs text-slate-500 mb-6">유튜브 주소를 입력해 노래를 등록해 보세요.</p>
+      <p class="text-xs text-slate-500 mb-6">유튜브 주소를 입력해 추천 노래를 등록해 보세요.</p>
 
       <div class="space-y-4">
         <div>
@@ -234,6 +259,10 @@
         </div>
 
         <form id="uploadForm" class="pt-4 border-t border-slate-100 space-y-3">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">작성자 (닉네임)</label>
+            <input type="text" id="uploaderInput" required placeholder="추천인 이름/닉네임" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-bold">
+          </div>
           <div>
             <label class="block text-xs font-bold text-slate-700 mb-1">노래 제목</label>
             <input type="text" id="titleInput" required placeholder="곡 제목" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-bold">
@@ -259,13 +288,14 @@
     openModalBtn.addEventListener('click', () => uploadModal.classList.remove('hidden'));
     closeModalBtn.addEventListener('click', () => uploadModal.classList.add('hidden'));
 
-    // 검색 기능
+    // 검색 기능 (제목, 가수, 작성자 검색 지원)
     document.getElementById('searchInput').addEventListener('input', (e) => {
       const keyword = e.target.value.toLowerCase().trim();
       const allMusic = window.getAllMusicList();
       const filtered = allMusic.filter(m => 
         m.title.toLowerCase().includes(keyword) || 
-        m.artist.toLowerCase().includes(keyword)
+        m.artist.toLowerCase().includes(keyword) ||
+        (m.uploader && m.uploader.toLowerCase().includes(keyword))
       );
       window.renderMusicList(filtered);
     });
@@ -276,7 +306,7 @@
       return (match && match[2].length === 11) ? match[2] : null;
     }
 
-    // 유튜브 정보 가져오기
+    // 유튜브 정보 불러오기
     document.getElementById('fetchYtBtn').addEventListener('click', async () => {
       const url = document.getElementById('ytUrlInput').value.trim();
       const videoId = extractVideoId(url);
@@ -310,6 +340,7 @@
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
+      const uploader = document.getElementById('uploaderInput').value.trim();
       const title = document.getElementById('titleInput').value.trim();
       const artist = document.getElementById('artistInput').value.trim();
       const ytUrl = document.getElementById('ytUrlInput').value.trim();
@@ -323,6 +354,7 @@
 
       try {
         await window.addDoc(window.collection(window.db, "music_list"), {
+          uploader: uploader,
           title: title,
           artist: artist,
           videoId: videoId,
