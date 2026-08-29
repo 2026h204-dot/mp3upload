@@ -142,6 +142,7 @@
       console.error("Firestore 연결 실패:", error);
     });
 
+    // 클릭 시 유튜브 페이지로 바로 이동
     window.openYoutube = function(id, videoId) {
       if (id && window.db) {
         try {
@@ -207,7 +208,7 @@
           </div>
           <div class="flex items-center justify-between mt-4 pt-2 border-t border-slate-100 text-[11px]">
             <span class="text-slate-400 font-bold">🎧 ${music.views || 0}회</span>
-            <span class="text-red-600 font-black group-hover:underline">▶ 재생 ↗</span>
+            <span class="text-red-600 font-black group-hover:underline">▶ 유튜브에서 보기 ↗</span>
           </div>
         `;
         container.appendChild(item);
